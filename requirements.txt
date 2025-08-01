@@ -1,0 +1,8 @@
+streamlit
+upstox-python
+pandas
+numpy
+plotly
+ta
+requests
+plyer
