@@ -16,7 +16,7 @@ ACCESS_TOKEN = os.environ.get("ACCESS_TOKEN") or st.secrets["ACCESS_TOKEN"]
 TELEGRAM_BOT_TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN") or st.secrets["TELEGRAM_BOT_TOKEN"]
 TELEGRAM_CHAT_ID = os.environ.get("TELEGRAM_CHAT_ID") or st.secrets["TELEGRAM_CHAT_ID"]
 
-SYMBOL = "NSE_INDEX|Nifty 50"  # Symbol for REST polling
+SYMBOL = "NSE_INDEX|Nifty 50"
 
 st.set_page_config(page_title="Nifty 50 Live Tracker", layout="wide")
 st.title("📈 Nifty 50 Live Tracker – Streamlit Cloud")
@@ -77,59 +77,8 @@ def detect_signals(df):
     if len(df) < 20:
         return None
     last = df.iloc[-1]
+    if not isinstance(last["close"], (int, float, np.number)):
+        return None
     signals = []
     if last["EMA20"] > last["EMA50"]:
-        signals.append("Bullish Trend")
-    else:
-        signals.append("Bearish Trend")
-    if last["close"] > last["BB_High"]:
-        signals.append("⚡ Breakout!")
-    elif last["close"] < last["BB_Low"]:
-        signals.append("⚠ Breakdown!")
-    return " | ".join(signals)
-
-def plot_candlestick(df):
-    fig = go.Figure(data=[go.Candlestick(
-        x=df['datetime'],
-        open=df['open'], high=df['high'],
-        low=df['low'], close=df['close']
-    )])
-    if "EMA20" in df.columns:
-        fig.add_trace(go.Scatter(x=df['datetime'], y=df['EMA20'], line=dict(color='blue',width=1), name='EMA20'))
-    if "EMA50" in df.columns:
-        fig.add_trace(go.Scatter(x=df['datetime'], y=df['EMA50'], line=dict(color='orange',width=1), name='EMA50'))
-    fig.update_layout(height=600, xaxis_rangeslider_visible=False, template='plotly_dark')
-    return fig
-
-# ---------------- STREAMLIT LOOP ----------------
-st.info("App is running in free mode (REST polling every 10s, not WebSocket real-time)")
-
-while True:
-    ltp = fetch_nifty_price()
-    if ltp:
-        ts = datetime.now()
-        df.loc[len(df)] = [ts, ltp, ltp, ltp, ltp, 0]
-        df = df.tail(200)
-    
-    df_ind = compute_indicators(df)
-    signals = detect_signals(df_ind)
-
-    with placeholder.container():
-        col1, col2 = st.columns(2)
-        if len(df_ind) > 0:
-            col1.metric("Last Price", f"{df_ind['close'].iloc[-1]:.2f}")
-        col2.metric("Signal", signals or "Waiting for data...")
-
-        if len(df_ind) > 0:
-            st.plotly_chart(plot_candlestick(df_ind), use_container_width=True)
-
-        # Send alerts only when signal changes
-        if signals and signals != prev_signal:
-            if "Breakout" in signals or "Breakdown" in signals:
-                play_sound()
-                send_telegram_alert(f"Nifty 50 Alert: {signals}")
-            prev_signal = signals
-
-    time.sleep(10)
-
-
+        signals.append
