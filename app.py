@@ -7,7 +7,7 @@ from datetime import datetime
 from ta.trend import EMAIndicator, MACD, ADXIndicator, AroonIndicator
 from ta.momentum import RSIIndicator
 from ta.volatility import BollingerBands
-from upstox_api.api import Upstox
+from upstox import Upstox
 import requests
 import base64
 from plyer import notification
@@ -144,5 +144,6 @@ while True:
                 send_telegram_alert(f"Nifty 50 Alert: {signals}")
                 desktop_alert("Nifty 50 Signal", signals)
             prev_signal = signals
+
 
     time.sleep(10)
