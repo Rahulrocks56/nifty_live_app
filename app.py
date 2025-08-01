@@ -140,4 +140,8 @@ with placeholder.container():
         st.session_state.prev_signal = signals
 
 # ---------------- AUTO REFRESH ----------------
-st.experimental_rerun()
+from streamlit_autorefresh import st_autorefresh
+
+# Auto-refresh every 10 seconds (10000 ms)
+st_autorefresh(interval=10000, key="refresh")
+
