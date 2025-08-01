@@ -45,15 +45,13 @@ def play_sound():
 # ---------------- PRICE FETCH (REST API POLLING) ----------------
 def fetch_nifty_price():
     try:
-        # Example placeholder REST API for demonstration
-        # Replace with your actual Upstox REST endpoint
-        url = f"https://api.upstox.com/v2/market/quote/NSE_INDEX:Nifty 50"
+        url = "https://api.upstox.com/v2/market-quote/ltp?symbol=NSE_INDEX|Nifty 50"
         headers = {"Authorization": f"Bearer {ACCESS_TOKEN}"}
         resp = requests.get(url, headers=headers, timeout=5)
         data = resp.json()
-        ltp = float(data['data']['last_price'])  # adjust based on real API structure
+        ltp = float(data['data']["NSE_INDEX|Nifty 50"]['last_price'])
         return ltp
-    except:
+    except Exception as e:
         return None
 
 # ---------------- INDICATORS ----------------
@@ -130,3 +128,4 @@ while True:
             prev_signal = signals
 
     time.sleep(10)
+
