@@ -45,14 +45,13 @@ def play_sound():
 # ---------------- PRICE FETCH (REST API POLLING) ----------------
 def fetch_nifty_price():
     try:
-        # Dummy placeholder REST endpoint for free hosting demo
-        # Replace with your own Upstox REST endpoint if available
+        # Example placeholder REST API for demonstration
+        # Replace with your actual Upstox REST endpoint
         url = f"https://api.upstox.com/v2/market/quote/NSE_INDEX:Nifty 50"
         headers = {"Authorization": f"Bearer {ACCESS_TOKEN}"}
         resp = requests.get(url, headers=headers, timeout=5)
         data = resp.json()
-        # Extract LTP from the JSON response (adjust based on API format)
-        ltp = float(data['data']['last_price'])
+        ltp = float(data['data']['last_price'])  # adjust based on real API structure
         return ltp
     except:
         return None
@@ -123,8 +122,7 @@ while True:
         if len(df_ind) > 0:
             st.plotly_chart(plot_candlestick(df_ind), use_container_width=True)
 
-            with placeholder.container():
-        ...
+        # Send alerts only when signal changes
         if signals and signals != prev_signal:
             if "Breakout" in signals or "Breakdown" in signals:
                 play_sound()
@@ -132,4 +130,3 @@ while True:
             prev_signal = signals
 
     time.sleep(10)
-
