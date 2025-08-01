@@ -49,9 +49,12 @@ def fetch_nifty_price():
         headers = {"Authorization": f"Bearer {ACCESS_TOKEN}"}
         resp = requests.get(url, headers=headers, timeout=5)
         data = resp.json()
-        ltp = float(data['data']["NSE_INDEX|Nifty 50"]['last_price'])
-        return ltp
-    except Exception as e:
+        price_data = data['data'].get("NSE_INDEX|Nifty 50")
+        if price_data and 'last_price' in price_data:
+            return float(price_data['last_price'])
+        else:
+            return "Market Closed"
+    except:
         return None
 
 # ---------------- INDICATORS ----------------
@@ -128,4 +131,5 @@ while True:
             prev_signal = signals
 
     time.sleep(10)
+
 
