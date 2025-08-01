@@ -1,9 +1,6 @@
 streamlit
-git+https://github.com/upstox/upstox-python.git
 pandas
 numpy
 plotly
 ta
 requests
-
-plyer
