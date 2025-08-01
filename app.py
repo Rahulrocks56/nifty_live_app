@@ -123,7 +123,8 @@ while True:
         if len(df_ind) > 0:
             st.plotly_chart(plot_candlestick(df_ind), use_container_width=True)
 
-        global prev_signal
+            with placeholder.container():
+        ...
         if signals and signals != prev_signal:
             if "Breakout" in signals or "Breakdown" in signals:
                 play_sound()
@@ -131,3 +132,4 @@ while True:
             prev_signal = signals
 
     time.sleep(10)
+
