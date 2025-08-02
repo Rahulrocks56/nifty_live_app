@@ -8,8 +8,9 @@ from ta.trend import EMAIndicator, MACD
 from ta.momentum import RSIIndicator
 from ta.volatility import BollingerBands
 import os
-import time
 from streamlit_autorefresh import st_autorefresh
+import math
+from scipy.stats import norm
 
 # ---------------- CONFIG ----------------
 API_KEY = os.environ.get("API_KEY") or st.secrets["API_KEY"]
@@ -105,6 +106,24 @@ def play_sound():
     """
     st.markdown(sound_html, unsafe_allow_html=True)
 
+# Black-Scholes pricing
+def black_scholes_call_price(S, K, T, r, sigma):
+    d1 = (math.log(S/K) + (r + 0.5*sigma**2)*T) / (sigma*math.sqrt(T))
+    d2 = d1 - sigma*math.sqrt(T)
+    return S*norm.cdf(d1) - K*math.exp(-r*T)*norm.cdf(d2)
+
+def black_scholes_put_price(S, K, T, r, sigma):
+    d1 = (math.log(S/K) + (r + 0.5*sigma**2)*T) / (sigma*math.sqrt(T))
+    d2 = d1 - sigma*math.sqrt(T)
+    return K*math.exp(-r*T)*norm.cdf(-d2) - S*norm.cdf(-d1)
+
+def long_option_strategy_profit(spot, call_strike, put_strike, call_premium, put_premium, call_lots, put_lots):
+    call_iv = max(spot - call_strike, 0)
+    put_iv = max(put_strike - spot, 0)
+    long_call_pl = (call_iv - call_premium) * call_lots
+    long_put_pl = (put_iv - put_premium) * put_lots
+    return long_call_pl + long_put_pl
+
 # ---------------- UPDATE DATA ----------------
 ltp = fetch_nifty_price()
 df = st.session_state.df
@@ -120,7 +139,7 @@ df_ind = compute_indicators(st.session_state.df)
 signals = detect_signals(df_ind)
 
 # ---------------- TABS ----------------
-tab1, tab2 = st.tabs(["📈 Live Tracker", "💹 Hedged Options Trade"])
+tab1, tab2 = st.tabs(["📈 Live Tracker", "💹 Multi-Leg Options Hedge"])
 
 # -------- TAB 1: LIVE TRACKER --------
 with tab1:
@@ -140,46 +159,51 @@ with tab1:
         if len(df_ind) > 0:
             st.plotly_chart(plot_candlestick(df_ind), use_container_width=True)
 
-        # Alert only on signal change
         if signals and signals != st.session_state.prev_signal and ltp:
             if "Breakout" in signals or "Breakdown" in signals:
                 play_sound()
                 send_telegram_alert(f"Nifty 50 Alert: {signals}")
             st.session_state.prev_signal = signals
 
-# -------- TAB 2: HEDGED OPTIONS TRADE --------
+# -------- TAB 2: MULTI-LEG OPTION BUY STRATEGY --------
 with tab2:
-    st.subheader("Suggested Hedged Nifty 50 Options Trade")
-    
+    st.subheader("Dynamic Hedged Nifty 50 Options (Only Buying)")
+
     if len(df_ind) < 20 or signals is None:
         st.info("Not enough data to suggest a trade.")
     else:
         last_price = df_ind['close'].iloc[-1]
         atm_strike = round(last_price / 50) * 50
-        hedge_strike = atm_strike + 200
 
-        # Check bullish conditions
-        bullish = (
-            df_ind['EMA20'].iloc[-1] > df_ind['EMA50'].iloc[-1] and
-            df_ind['MACD'].iloc[-1] > 0 and
-            40 < df_ind['RSI'].iloc[-1] < 70
-        )
+        # Assume 1-week expiry
+        T = 7/365
+        r = 0.05
+        sigma = 0.18  # IV approx
 
-        # VCP detection: Bollinger Band width contraction
-        bb_width = (df_ind['BB_High'].iloc[-1] - df_ind['BB_Low'].iloc[-1]) / last_price
-        vcp_signal = bb_width < 0.02  # <2% width → contraction
+        # Approx option premiums
+        call_premium = black_scholes_call_price(last_price, atm_strike, T, r, sigma)
+        put_premium = black_scholes_put_price(last_price, atm_strike, T, r, sigma)
 
-        if bullish and vcp_signal:
-            st.success(f"""
-            **Recommended Trade: Bull Call Spread**
+        call_lots = st.number_input("Number of Call Lots", min_value=0, max_value=5, value=1)
+        put_lots = st.number_input("Number of Put Lots", min_value=0, max_value=5, value=1)
+        lot_size = 50
 
-            - Buy 1 Lot Nifty50 {atm_strike} CE  
-            - Sell 1 Lot Nifty50 {hedge_strike} CE  
-            - Max Loss ≈ 10% of premium (limited)  
-            - Unlimited Profit beyond upper strike  
-            - Probability of Profit > 70%
+        net_premium = (call_premium*call_lots + put_premium*put_lots)
+        max_loss = net_premium * lot_size
 
-            _Entry Reason_: EMA20>EMA50, MACD positive, RSI healthy, VCP breakout detected
-            """)
-        else:
-            st.info("No high-probability hedged trade right now. Waiting for bullish VCP confirmation.")
+        st.write(f"**Max Loss:** ₹{max_loss:.2f} (limited to premium paid)")
+        st.write("**Max Profit:** Unlimited if market moves sharply")
+
+        # Spot slider
+        spot = st.slider("Nifty 50 Spot Price", int(atm_strike*0.9), int(atm_strike*1.1), int(last_price))
+        pl = long_option_strategy_profit(spot, atm_strike, atm_strike, call_premium, put_premium, call_lots, put_lots)
+        st.metric("P/L at Spot", f"₹{pl*lot_size:.2f} per lot combination")
+
+        st.info(f"""
+        **Trade Setup: Multi-leg Option Hedge**
+        - Buy {call_lots}x Nifty50 {atm_strike} CE ≈ ₹{call_premium*lot_size*call_lots:.2f}
+        - Buy {put_lots}x Nifty50 {atm_strike} PE ≈ ₹{put_premium*lot_size*put_lots:.2f}
+        - Total Cost ≈ ₹{net_premium*lot_size:.2f}
+        - Max Loss = Total Premium Paid
+        - Unlimited Profit if market moves significantly up or down
+        """)
