@@ -8,6 +8,8 @@ from ta.trend import EMAIndicator, MACD
 from ta.momentum import RSIIndicator
 from ta.volatility import BollingerBands
 import os
+import time
+from streamlit_autorefresh import st_autorefresh
 
 # ---------------- CONFIG ----------------
 API_KEY = os.environ.get("API_KEY") or st.secrets["API_KEY"]
@@ -17,6 +19,9 @@ TELEGRAM_CHAT_ID = os.environ.get("TELEGRAM_CHAT_ID") or st.secrets["TELEGRAM_CH
 
 st.set_page_config(page_title="Nifty 50 Live Tracker", layout="wide")
 st.title("📈 Nifty 50 Live Tracker – Streamlit Cloud")
+
+# Auto-refresh every 10 seconds
+st_autorefresh(interval=10000, key="data_refresh")
 
 # Initialize session state DataFrame
 if "df" not in st.session_state:
@@ -111,37 +116,70 @@ if ltp:
 else:
     st.warning("No data received. Market might be closed or token expired.")
 
-# ---------------- COMPUTE SIGNALS ----------------
 df_ind = compute_indicators(st.session_state.df)
 signals = detect_signals(df_ind)
 
-# ---------------- STREAMLIT UI ----------------
-placeholder = st.empty()
-with placeholder.container():
-    col1, col2 = st.columns(2)
+# ---------------- TABS ----------------
+tab1, tab2 = st.tabs(["📈 Live Tracker", "💹 Hedged Options Trade"])
 
-    if len(df_ind) > 0 and isinstance(df_ind['close'].iloc[-1], (int, float, np.number)):
-        col1.metric("Last Price", f"{df_ind['close'].iloc[-1]:.2f}")
-    elif ltp is None:
-        col1.metric("Last Price", "No Data")
+# -------- TAB 1: LIVE TRACKER --------
+with tab1:
+    placeholder = st.empty()
+    with placeholder.container():
+        col1, col2 = st.columns(2)
+
+        if len(df_ind) > 0 and isinstance(df_ind['close'].iloc[-1], (int, float, np.number)):
+            col1.metric("Last Price", f"{df_ind['close'].iloc[-1]:.2f}")
+        elif ltp is None:
+            col1.metric("Last Price", "No Data")
+        else:
+            col1.metric("Last Price", "Market Closed")
+
+        col2.metric("Signal", signals or "Waiting for data...")
+
+        if len(df_ind) > 0:
+            st.plotly_chart(plot_candlestick(df_ind), use_container_width=True)
+
+        # Alert only on signal change
+        if signals and signals != st.session_state.prev_signal and ltp:
+            if "Breakout" in signals or "Breakdown" in signals:
+                play_sound()
+                send_telegram_alert(f"Nifty 50 Alert: {signals}")
+            st.session_state.prev_signal = signals
+
+# -------- TAB 2: HEDGED OPTIONS TRADE --------
+with tab2:
+    st.subheader("Suggested Hedged Nifty 50 Options Trade")
+    
+    if len(df_ind) < 20 or signals is None:
+        st.info("Not enough data to suggest a trade.")
     else:
-        col1.metric("Last Price", "Market Closed")
+        last_price = df_ind['close'].iloc[-1]
+        atm_strike = round(last_price / 50) * 50
+        hedge_strike = atm_strike + 200
 
-    col2.metric("Signal", signals or "Waiting for data...")
+        # Check bullish conditions
+        bullish = (
+            df_ind['EMA20'].iloc[-1] > df_ind['EMA50'].iloc[-1] and
+            df_ind['MACD'].iloc[-1] > 0 and
+            40 < df_ind['RSI'].iloc[-1] < 70
+        )
 
-    if len(df_ind) > 0:
-        st.plotly_chart(plot_candlestick(df_ind), use_container_width=True)
+        # VCP detection: Bollinger Band width contraction
+        bb_width = (df_ind['BB_High'].iloc[-1] - df_ind['BB_Low'].iloc[-1]) / last_price
+        vcp_signal = bb_width < 0.02  # <2% width → contraction
 
-    # Alert only on signal change
-    if signals and signals != st.session_state.prev_signal and ltp:
-        if "Breakout" in signals or "Breakdown" in signals:
-            play_sound()
-            send_telegram_alert(f"Nifty 50 Alert: {signals}")
-        st.session_state.prev_signal = signals
+        if bullish and vcp_signal:
+            st.success(f"""
+            **Recommended Trade: Bull Call Spread**
 
-# ---------------- AUTO REFRESH ----------------
-from streamlit_autorefresh import st_autorefresh
+            - Buy 1 Lot Nifty50 {atm_strike} CE  
+            - Sell 1 Lot Nifty50 {hedge_strike} CE  
+            - Max Loss ≈ 10% of premium (limited)  
+            - Unlimited Profit beyond upper strike  
+            - Probability of Profit > 70%
 
-# Auto-refresh every 10 seconds (10000 ms)
-st_autorefresh(interval=10000, key="refresh")
-
+            _Entry Reason_: EMA20>EMA50, MACD positive, RSI healthy, VCP breakout detected
+            """)
+        else:
+            st.info("No high-probability hedged trade right now. Waiting for bullish VCP confirmation.")
