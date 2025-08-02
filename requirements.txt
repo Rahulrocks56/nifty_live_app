@@ -4,5 +4,5 @@ numpy
 plotly
 ta
 requests
+scipy
 streamlit-autorefresh
-
