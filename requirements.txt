@@ -1,0 +1,5 @@
+streamlit
+upstox-python-sdk
+requests
+pandas
+schedule
