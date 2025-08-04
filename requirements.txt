@@ -3,3 +3,4 @@ upstox-api
 requests
 pandas
 schedule
+
