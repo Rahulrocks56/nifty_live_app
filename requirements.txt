@@ -1,6 +1,5 @@
 streamlit
-upstox-api
+upstox-api==1.3.6
 requests
 pandas
 schedule
-
