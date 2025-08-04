@@ -1,45 +1,64 @@
-# app.py
-
 import streamlit as st
-from upstox_client import UpstoxClient
+import threading
+import asyncio
+from datetime import datetime
+from upstox_client import Configuration, ApiClient
+from upstox_client.api.get_profile_api import GetProfileApi
+from upstox_client.api.get_market_api import GetMarketApi
 from upstox_client.rest import ApiException
-from upstox_client.models import GetProfileResponse, GetMarketStatusResponse
 
-# ========== Setup Streamlit UI ==========
-st.set_page_config(page_title="Nifty 50 Live Tracker", layout="wide")
-st.title("📈 Nifty 50 Live Dashboard")
-st.caption("Powered by Upstox SDK & Streamlit")
+# ========== Streamlit Setup ==========
+st.set_page_config(page_title="📈 Nifty 50 Dashboard", layout="wide")
+st.title("📡 Nifty 50 Breakout Tracker")
 
 # ========== Load Secrets ==========
 ACCESS_TOKEN = st.secrets["ACCESS_TOKEN"]
 
-# ========== Configure API Client ==========
-configuration = UpstoxClient.Configuration()
-configuration.access_token = ACCESS_TOKEN
-client = UpstoxClient(configuration)
+# ========== Upstox Client Setup ==========
+config = Configuration()
+config.access_token = ACCESS_TOKEN
+client = ApiClient(configuration=config)
 
-# ========== Fetch & Display User Info ==========
-st.subheader("👤 User Info")
-
+# ========== Show User Profile ==========
 try:
-    profile: GetProfileResponse = client.get_profile_api().get_profile()
+    profile_api = GetProfileApi(client)
+    profile = profile_api.get_profile()
+    st.subheader("👤 User Info")
     st.json(profile.to_dict())
 except ApiException as e:
-    st.error(f"Profile API Exception: {e}")
+    st.error(f"Profile API Error: {e}")
 
-# ========== Fetch & Display Market Status ==========
-st.subheader("📊 Market Status")
-
+# ========== Show Market Status ==========
 try:
-    market_status: GetMarketStatusResponse = client.get_market_api().get_market_status()
-    st.json(market_status.to_dict())
+    market_api = GetMarketApi(client)
+    status = market_api.get_market_status()
+    st.subheader("📊 Market Status")
+    st.json(status.to_dict())
 except ApiException as e:
-    st.error(f"Market Status API Exception: {e}")
+    st.error(f"Market Status API Error: {e}")
 
-# ========== Placeholder for Nifty 50 Quotes ==========
-st.subheader("🧠 Nifty 50 Live Data (Coming Soon)")
-st.info("Real-time quotes and breakout logic coming next...")
+# ========== WebSocket Integration ==========
+st.subheader("🧠 Live Quote Feed")
+
+from nifty_ws import subscribe_feed, latest_quotes  # Ensure this module exists
+
+def run_ws():
+    asyncio.run(subscribe_feed())
+
+if st.button("Start WebSocket Feed"):
+    st.success("WebSocket started — listening for quotes...")
+    threading.Thread(target=run_ws, daemon=True).start()
+
+# Display live quotes and alerts
+if latest_quotes:
+    for symbol, info in latest_quotes.items():
+        ltp = info.get("ltp")
+        ts = info.get("timestamp", datetime.now().strftime('%H:%M:%S'))
+        alert = info.get("alert")
+        st.metric(label=f"{symbol}", value=f"₹{ltp}", delta=alert or "—", help=f"Last updated: {ts}")
+else:
+    st.info("Quotes will appear here once feed starts...")
 
 # ========== Footer ==========
 st.markdown("---")
-st.caption("Developed by Rahul • Streamlit + Upstox SDK")
+st.caption("Built with ❤️ by Rahul • Powered by Streamlit & Upstox SDK")
